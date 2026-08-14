@@ -14,9 +14,17 @@ export default function AuthCallback() {
     const params = new URLSearchParams(hash)
     const access_token = params.get('access_token')
     const refresh_token = params.get('refresh_token')
+    const error_code = params.get('error_code')
+    const error_description = params.get('error_description')
 
     if (!access_token || !refresh_token) {
-      setStatus('No valid session found.')
+      if (error_code || error_description) {
+        console.error('Auth callback error:', error_code, error_description)
+        setStatus(`Login link issue: ${error_description || error_code}`)
+      } else {
+        console.error('Auth callback: no tokens and no error in hash. Full hash:', hash)
+        setStatus('No valid session found.')
+      }
       router.push('/resend-link')
       return
     }
