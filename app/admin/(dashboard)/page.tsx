@@ -16,6 +16,8 @@ interface Article {
     published_at: string;
     category_tag: string;
     content: { body?: string };
+    author_name?: string;
+    author_role?: string;
 }
 
 interface BookRow {
@@ -25,6 +27,11 @@ interface BookRow {
     created_at: string;
     topic?: string;
     format?: string;
+    description?: string;
+    price?: number;
+    amazon_url?: string;
+    cover_image_url?: string;
+    file_url?: string;
 }
 
 interface ResourceRow {
@@ -68,6 +75,9 @@ export default function AdminCMSPage() {
     const [articleExcerpt, setArticleExcerpt] = useState('');
     const [content, setContent] = useState('');
     const [imageFile, setImageFile] = useState<File | null>(null);
+    const [authorName, setAuthorName] = useState('Betelhem');
+    const [authorRole, setAuthorRole] = useState('Software Engineer');
+    const [authorImageFile, setAuthorImageFile] = useState<File | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
     const [publishedSuccess, setPublishedSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -91,6 +101,9 @@ export default function AdminCMSPage() {
     const [bookLoading, setBookLoading] = useState(false);
     const [books, setBooks] = useState<BookRow[]>([]);
     const [fetchingBooks, setFetchingBooks] = useState(false);
+    const [editingBookId, setEditingBookId] = useState<number | null>(null);
+    const [existingBookCoverUrl, setExistingBookCoverUrl] = useState('');
+    const [existingBookFileUrl, setExistingBookFileUrl] = useState('');
 
     // ==========================================
     // 3. RESOURCE STATES ('resources' table)
@@ -106,6 +119,9 @@ export default function AdminCMSPage() {
     const [resLoading, setResLoading] = useState(false);
     const [resources, setResources] = useState<ResourceRow[]>([]);
     const [fetchingResources, setFetchingResources] = useState(false);
+    const [editingResourceId, setEditingResourceId] = useState<number | null>(null);
+    const [existingResImgUrl, setExistingResImgUrl] = useState('');
+    const [existingResFileUrl, setExistingResFileUrl] = useState('');
 
     // ==========================================
     // 4. EMAIL CAMPAIGN STATES ('campaigns' table)
@@ -117,6 +133,7 @@ export default function AdminCMSPage() {
     const [emailLoading, setEmailLoading] = useState(false);
     const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
     const [fetchingCampaigns, setFetchingCampaigns] = useState(false);
+    const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
 
     // ==========================================
     // FETCH DATA ON TAB SWITCH
@@ -132,7 +149,7 @@ export default function AdminCMSPage() {
         setFetchingArticles(true);
         const { data, error } = await supabase
             .from('Articles')
-            .select('id, title, published_at, category_tag, content')
+            .select('id, title, published_at, category_tag, content, author_name, author_role')
             .order('published_at', { ascending: false });
 
         if (!error && data) setArticles(data);
@@ -143,7 +160,7 @@ export default function AdminCMSPage() {
         setFetchingBooks(true);
         const { data, error } = await supabase
             .from('books')
-            .select('id, title, author, created_at, topic, format')
+            .select('id, title, author, created_at, topic, format, description, price, amazon_url, cover_image_url, file_url')
             .order('created_at', { ascending: false });
 
         if (!error && data) setBooks(data);
@@ -189,12 +206,29 @@ export default function AdminCMSPage() {
                 finalImgUrl = publicURLData.publicUrl;
             }
 
+            let finalAuthorImgUrl = '';
+            if (authorImageFile) {
+                const authorFileName = `author-${Date.now()}-${authorImageFile.name}`;
+                const { error: authorUploadError } = await supabase.storage.from('article-covers').upload(authorFileName, authorImageFile);
+                if (authorUploadError) throw authorUploadError;
+                const { data: authorPublicURLData } = supabase.storage.from('article-covers').getPublicUrl(authorFileName);
+                finalAuthorImgUrl = authorPublicURLData.publicUrl;
+            }
+
             const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
             const jsonContent = { body: content };
 
             if (editingId !== null) {
-                const updateData: any = { title, content: jsonContent, description: articleExcerpt, slug };
+                const updateData: any = {
+                    title,
+                    content: jsonContent,
+                    description: articleExcerpt,
+                    slug,
+                    author_name: authorName,
+                    author_role: authorRole,
+                };
                 if (finalImgUrl) updateData.img_url = finalImgUrl;
+                if (finalAuthorImgUrl) updateData.author_img_url = finalAuthorImgUrl;
                 const { error } = await supabase.from('Articles').update(updateData).eq('id', editingId);
                 if (error) throw error;
             } else {
@@ -203,12 +237,12 @@ export default function AdminCMSPage() {
                         title,
                         content: jsonContent,
                         description: articleExcerpt,
-
                         category_tag: 'Essays',
                         slug,
                         published_at: new Date().toISOString(),
-                        author_name: 'Betelhem',
-                        author_role: 'Software Engineer',
+                        author_name: authorName,
+                        author_role: authorRole,
+                        author_img_url: finalAuthorImgUrl,
                         img_url: finalImgUrl,
                     },
                 ]);
@@ -220,6 +254,9 @@ export default function AdminCMSPage() {
             setArticleExcerpt('');
             setContent('');
             setImageFile(null);
+            setAuthorName('Betelhem');
+            setAuthorRole('Software Engineer');
+            setAuthorImageFile(null);
             setEditingId(null);
             fetchArticles();
             setTimeout(() => setPublishedSuccess(false), 4000);
@@ -234,6 +271,8 @@ export default function AdminCMSPage() {
         setEditingId(art.id);
         setTitle(art.title);
         setContent(art.content?.body || '');
+        setAuthorName(art.author_name || 'Betelhem');
+        setAuthorRole(art.author_role || 'Software Engineer');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -243,6 +282,9 @@ export default function AdminCMSPage() {
         setArticleExcerpt('');
         setContent('');
         setImageFile(null);
+        setAuthorName('Betelhem');
+        setAuthorRole('Software Engineer');
+        setAuthorImageFile(null);
     };
 
     const handleDeleteArticle = async (id: number) => {
@@ -265,9 +307,7 @@ export default function AdminCMSPage() {
         setBookLoading(true);
 
         try {
-            let coverUrl = '';
-            let fileUrl = '';
-
+            let coverUrl = existingBookCoverUrl;
             if (bookCoverFile) {
                 const coverName = `cover-${Date.now()}-${bookCoverFile.name}`;
                 const { error: coverError } = await supabase.storage.from('article-covers').upload(coverName, bookCoverFile);
@@ -276,6 +316,7 @@ export default function AdminCMSPage() {
                 coverUrl = data.publicUrl;
             }
 
+            let fileUrl = existingBookFileUrl;
             if (bookFile) {
                 const fileName = `book-${Date.now()}-${bookFile.name}`;
                 const { error: fileError } = await supabase.storage.from('article-covers').upload(fileName, bookFile);
@@ -286,8 +327,8 @@ export default function AdminCMSPage() {
 
             const slug = bookTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-            const { error } = await supabase.from('books').insert([
-                {
+            if (editingBookId !== null) {
+                const { error } = await supabase.from('books').update({
                     title: bookTitle,
                     author: bookAuthor,
                     description: bookDescription,
@@ -298,21 +339,30 @@ export default function AdminCMSPage() {
                     topic: bookTopic,
                     format: bookFormat,
                     slug,
-                    direct_buy_enabled: true,
-                    created_at: new Date().toISOString(),
-                },
-            ]);
-
-            if (error) throw error;
+                }).eq('id', editingBookId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('books').insert([
+                    {
+                        title: bookTitle,
+                        author: bookAuthor,
+                        description: bookDescription,
+                        price: Number(bookPrice),
+                        amazon_url: bookAmazonUrl,
+                        cover_image_url: coverUrl,
+                        file_url: fileUrl,
+                        topic: bookTopic,
+                        format: bookFormat,
+                        slug,
+                        direct_buy_enabled: true,
+                        created_at: new Date().toISOString(),
+                    },
+                ]);
+                if (error) throw error;
+            }
 
             setBookSuccess(true);
-            setBookTitle('');
-            setBookAuthor('');
-            setBookDescription('');
-            setBookPrice('');
-            setBookAmazonUrl('');
-            setBookCoverFile(null);
-            setBookFile(null);
+            handleCancelEditBook();
             fetchBooks();
             setTimeout(() => setBookSuccess(false), 4000);
         } catch (error: any) {
@@ -322,12 +372,44 @@ export default function AdminCMSPage() {
         }
     };
 
+    const handleEditBookClick = (book: BookRow) => {
+        setEditingBookId(book.id);
+        setBookTitle(book.title);
+        setBookAuthor(book.author);
+        setBookDescription(book.description || '');
+        setBookPrice(book.price !== undefined && book.price !== null ? String(book.price) : '');
+        setBookAmazonUrl(book.amazon_url || '');
+        setBookTopic(book.topic || 'Startups');
+        setBookFormat(book.format || 'eBook');
+        setExistingBookCoverUrl(book.cover_image_url || '');
+        setExistingBookFileUrl(book.file_url || '');
+        setBookCoverFile(null);
+        setBookFile(null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEditBook = () => {
+        setEditingBookId(null);
+        setBookTitle('');
+        setBookAuthor('');
+        setBookDescription('');
+        setBookPrice('');
+        setBookAmazonUrl('');
+        setBookTopic('Startups');
+        setBookFormat('eBook');
+        setBookCoverFile(null);
+        setBookFile(null);
+        setExistingBookCoverUrl('');
+        setExistingBookFileUrl('');
+    };
+
     const handleDeleteBook = async (id: number) => {
         if (!confirm('Are you sure you want to delete this book?')) return;
         try {
             const { error } = await supabase.from('books').delete().eq('id', id);
             if (error) throw error;
             setBooks(books.filter((b) => b.id !== id));
+            if (editingBookId === id) handleCancelEditBook();
         } catch (error: any) {
             showError('Error deleting book: ' + error.message);
         }
@@ -338,13 +420,11 @@ export default function AdminCMSPage() {
     // ==========================================
     const handlePublishResource = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!resFile) return showError('Please select a downloadable resource file.');
+        if (!resFile && !existingResFileUrl) return showError('Please select a downloadable resource file.');
         setResLoading(true);
 
         try {
-            let imgUrl = '';
-            let fileUrl = '';
-
+            let imgUrl = existingResImgUrl;
             if (resImgFile) {
                 const imgName = `res-img-${Date.now()}-${resImgFile.name}`;
                 const { error: imgErr } = await supabase.storage.from('article-covers').upload(imgName, resImgFile);
@@ -353,16 +433,19 @@ export default function AdminCMSPage() {
                 imgUrl = data.publicUrl;
             }
 
-            const fileName = `res-file-${Date.now()}-${resFile.name}`;
-            const { error: fileErr } = await supabase.storage.from('article-covers').upload(fileName, resFile);
-            if (fileErr) throw fileErr;
-            const { data: fileData } = supabase.storage.from('article-covers').getPublicUrl(fileName);
-            fileUrl = fileData.publicUrl;
+            let fileUrl = existingResFileUrl;
+            if (resFile) {
+                const fileName = `res-file-${Date.now()}-${resFile.name}`;
+                const { error: fileErr } = await supabase.storage.from('article-covers').upload(fileName, resFile);
+                if (fileErr) throw fileErr;
+                const { data: fileData } = supabase.storage.from('article-covers').getPublicUrl(fileName);
+                fileUrl = fileData.publicUrl;
+            }
 
             const slug = resTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-            const { error } = await supabase.from('resources').insert([
-                {
+            if (editingResourceId !== null) {
+                const { error } = await supabase.from('resources').update({
                     title: resTitle,
                     description: resDescription,
                     category: resCategory,
@@ -371,19 +454,28 @@ export default function AdminCMSPage() {
                     img_url: imgUrl,
                     file_url: fileUrl,
                     slug: slug,
-                    date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                    created_at: new Date().toISOString(),
-                },
-            ]);
-
-            if (error) throw error;
+                }).eq('id', editingResourceId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('resources').insert([
+                    {
+                        title: resTitle,
+                        description: resDescription,
+                        category: resCategory,
+                        file_type: resFileType,
+                        is_gated: resIsGated,
+                        img_url: imgUrl,
+                        file_url: fileUrl,
+                        slug: slug,
+                        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                        created_at: new Date().toISOString(),
+                    },
+                ]);
+                if (error) throw error;
+            }
 
             setResSuccess(true);
-            setResTitle('');
-            setResDescription('');
-            setResImgFile(null);
-            setResFile(null);
-            setResIsGated(false);
+            handleCancelEditResource();
             fetchResources();
             setTimeout(() => setResSuccess(false), 4000);
         } catch (err: any) {
@@ -393,12 +485,40 @@ export default function AdminCMSPage() {
         }
     };
 
+    const handleEditResourceClick = (r: ResourceRow) => {
+        setEditingResourceId(r.id);
+        setResTitle(r.title);
+        setResDescription(r.description || '');
+        setResCategory(r.category);
+        setResFileType(r.file_type);
+        setResIsGated(r.is_gated);
+        setExistingResImgUrl(r.img_url || '');
+        setExistingResFileUrl(r.file_url || '');
+        setResImgFile(null);
+        setResFile(null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEditResource = () => {
+        setEditingResourceId(null);
+        setResTitle('');
+        setResDescription('');
+        setResCategory(RESOURCE_CATEGORIES[0]);
+        setResFileType(RESOURCE_TYPES[0]);
+        setResIsGated(false);
+        setResImgFile(null);
+        setResFile(null);
+        setExistingResImgUrl('');
+        setExistingResFileUrl('');
+    };
+
     const handleDeleteResource = async (id: number) => {
         if (!confirm('Are you sure you want to delete this resource?')) return;
         try {
             const { error } = await supabase.from('resources').delete().eq('id', id);
             if (error) throw error;
             setResources(resources.filter((r) => r.id !== id));
+            if (editingResourceId === id) handleCancelEditResource();
         } catch (err: any) {
             showError('Error deleting resource: ' + err.message);
         }
@@ -412,7 +532,6 @@ export default function AdminCMSPage() {
         setEmailLoading(true);
 
         try {
-            // If status is Sent, call our backend API to handle fetching subscribers & emailing via Resend
             if (status === 'Sent') {
                 const response = await fetch('/api/send-campaign', {
                     method: 'POST',
@@ -430,24 +549,31 @@ export default function AdminCMSPage() {
                 }
             }
 
-            // Save the campaign record in Supabase
-            const { error } = await supabase.from('campaigns').insert([
-                {
+            if (editingCampaignId !== null) {
+                const { error } = await supabase.from('campaigns').update({
                     subject: emailSubject,
                     preview_text: emailPreviewText,
                     body_content: emailBody,
                     status: status,
                     sent_at: status === 'Sent' ? new Date().toISOString() : null,
-                    created_at: new Date().toISOString(),
-                },
-            ]);
-
-            if (error) throw error;
+                }).eq('id', editingCampaignId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('campaigns').insert([
+                    {
+                        subject: emailSubject,
+                        preview_text: emailPreviewText,
+                        body_content: emailBody,
+                        status: status,
+                        sent_at: status === 'Sent' ? new Date().toISOString() : null,
+                        created_at: new Date().toISOString(),
+                    },
+                ]);
+                if (error) throw error;
+            }
 
             setEmailSuccess(true);
-            setEmailSubject('');
-            setEmailPreviewText('');
-            setEmailBody('');
+            handleCancelEditCampaign();
             fetchCampaigns();
             setTimeout(() => setEmailSuccess(false), 4000);
         } catch (err: any) {
@@ -457,12 +583,28 @@ export default function AdminCMSPage() {
         }
     };
 
+    const handleEditCampaignClick = (c: CampaignRow) => {
+        setEditingCampaignId(c.id);
+        setEmailSubject(c.subject);
+        setEmailPreviewText(c.preview_text || '');
+        setEmailBody(c.body_content);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEditCampaign = () => {
+        setEditingCampaignId(null);
+        setEmailSubject('');
+        setEmailPreviewText('');
+        setEmailBody('');
+    };
+
     const handleDeleteCampaign = async (id: number) => {
         if (!confirm('Are you sure you want to delete this campaign?')) return;
         try {
             const { error } = await supabase.from('campaigns').delete().eq('id', id);
             if (error) throw error;
             setCampaigns(campaigns.filter((c) => c.id !== id));
+            if (editingCampaignId === id) handleCancelEditCampaign();
         } catch (err: any) {
             showError('Error deleting campaign: ' + err.message);
         }
@@ -470,7 +612,6 @@ export default function AdminCMSPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-            {/* Top Header */}
             <header className="bg-primary-navy text-white px-8 py-4 flex justify-between items-center shadow-md">
                 <div className="flex items-center space-x-3">
                     <span className="bg-primary-green text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">
@@ -490,9 +631,7 @@ export default function AdminCMSPage() {
                 </div>
             </header>
 
-            {/* Main Container */}
             <div className="flex-1 flex max-w-7xl w-full mx-auto">
-                {/* Sidebar */}
                 <aside className="w-64 bg-white border-r border-gray-200 p-6 space-y-2">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Management</p>
                     <button
@@ -525,7 +664,6 @@ export default function AdminCMSPage() {
                     </button>
                 </aside>
 
-                {/* Dynamic Content Panel */}
                 <main className="flex-1 p-8 space-y-8">
                     {errorMsg && (
                         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-4">
@@ -533,7 +671,6 @@ export default function AdminCMSPage() {
                             <button onClick={() => setErrorMsg(null)} className="font-bold text-lg hover:text-red-900">&times;</button>
                         </div>
                     )}
-                    {/* TAB 1: ESSAYS */}
                     {activeTab === 'essays' && (
                         <>
                             {publishedSuccess && (
@@ -597,6 +734,39 @@ export default function AdminCMSPage() {
                                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-green file:text-white hover:file:bg-green-600 cursor-pointer"
                                                 />
                                             </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Author Name</label>
+                                                    <input
+                                                        type="text"
+                                                        value={authorName}
+                                                        onChange={(e) => setAuthorName(e.target.value)}
+                                                        placeholder="e.g., Betelhem"
+                                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary-green"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Author Role</label>
+                                                    <input
+                                                        type="text"
+                                                        value={authorRole}
+                                                        onChange={(e) => setAuthorRole(e.target.value)}
+                                                        placeholder="e.g., Software Engineer"
+                                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary-green"
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Author Photo (optional)</label>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={(e) => setAuthorImageFile(e.target.files?.[0] || null)}
+                                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-green file:text-white hover:file:bg-green-600 cursor-pointer"
+                                                />
+                                            </div>
                                             <div>
                                                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Content Body</label>
                                                 <textarea
@@ -613,6 +783,7 @@ export default function AdminCMSPage() {
                                         <div className="bg-gray-50 p-6 rounded-xl border min-h-[200px]">
                                             <span className="text-xs text-primary-green font-semibold uppercase">Live Preview</span>
                                             <h3 className="text-2xl font-bold text-primary-navy mt-2">{title || 'Untitled'}</h3>
+                                            <p className="text-sm text-gray-500 mt-1">By {authorName || 'Untitled'} &bull; {authorRole}</p>
                                             <div className="mt-4 text-gray-700 whitespace-pre-wrap text-sm">{content || 'Nothing to preview.'}</div>
                                         </div>
                                     )}
@@ -637,7 +808,10 @@ export default function AdminCMSPage() {
                                             <div key={art.id} className="flex justify-between items-center p-4 rounded-xl border bg-gray-50/50">
                                                 <div>
                                                     <h4 className="font-semibold text-primary-navy text-sm">{art.title}</h4>
-                                                    <span className="text-xs text-gray-400">Published on {new Date(art.published_at).toLocaleDateString()}</span>
+                                                    <span className="text-xs text-gray-400">
+                                                        Published on {new Date(art.published_at).toLocaleDateString()}
+                                                        {art.author_name && <> &bull; By {art.author_name}</>}
+                                                    </span>
                                                 </div>
                                                 <div className="flex space-x-2">
                                                     <button onClick={() => handleEditClick(art)} className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">Edit</button>
@@ -651,19 +825,27 @@ export default function AdminCMSPage() {
                         </>
                     )}
 
-                    {/* TAB 2: BOOKS & COVERS */}
                     {activeTab === 'books' && (
                         <>
                             {bookSuccess && (
                                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
-                                    Book and files successfully uploaded to catalog!
+                                    {editingBookId ? 'Book successfully updated!' : 'Book and files successfully uploaded to catalog!'}
                                 </div>
                             )}
 
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                                <div className="mb-6 pb-4 border-b border-gray-100">
-                                    <h2 className="text-xl font-bold text-primary-navy">Upload New Book & Cover</h2>
-                                    <p className="text-xs text-gray-500 mt-1">Add book metadata, cover graphics, and downloadable files.</p>
+                                <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-primary-navy">
+                                            {editingBookId ? 'Edit Book' : 'Upload New Book & Cover'}
+                                        </h2>
+                                        <p className="text-xs text-gray-500 mt-1">Add book metadata, cover graphics, and downloadable files.</p>
+                                    </div>
+                                    {editingBookId && (
+                                        <button onClick={handleCancelEditBook} className="px-4 py-2 text-xs font-semibold border rounded-xl hover:bg-gray-50">
+                                            Cancel Edit
+                                        </button>
+                                    )}
                                 </div>
 
                                 <form onSubmit={handlePublishBook} className="space-y-6">
@@ -750,29 +932,36 @@ export default function AdminCMSPage() {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Book Cover Image</label>
+                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                                            Book Cover Image{editingBookId && existingBookCoverUrl ? ' (leave blank to keep current)' : ''}
+                                        </label>
+                                        {editingBookId && existingBookCoverUrl && (
+                                            <img src={existingBookCoverUrl} alt="Current cover" className="w-16 h-24 object-cover rounded-lg border border-gray-200 mb-2" />
+                                        )}
                                         <input
                                             type="file"
                                             accept="image/*"
                                             onChange={(e) => setBookCoverFile(e.target.files?.[0] || null)}
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-green file:text-white hover:file:bg-green-600 cursor-pointer"
-                                            required
+                                            required={!editingBookId}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Downloadable Book File (PDF / EPUB)</label>
+                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                                            Downloadable Book File (PDF / EPUB){editingBookId && existingBookFileUrl ? ' (leave blank to keep current)' : ''}
+                                        </label>
                                         <input
                                             type="file"
                                             accept=".pdf,.epub"
                                             onChange={(e) => setBookFile(e.target.files?.[0] || null)}
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-green file:text-white hover:file:bg-green-600 cursor-pointer"
-                                            required
+                                            required={!editingBookId}
                                         />
                                     </div>
 
                                     <div className="flex justify-end pt-4">
                                         <button type="submit" disabled={bookLoading} className="px-6 py-3 bg-primary-green text-white font-medium rounded-xl text-sm hover:bg-green-600 disabled:opacity-50">
-                                            {bookLoading ? 'Uploading...' : 'Save Book & Files'}
+                                            {bookLoading ? 'Saving...' : editingBookId ? 'Update Book' : 'Save Book & Files'}
                                         </button>
                                     </div>
                                 </form>
@@ -792,9 +981,12 @@ export default function AdminCMSPage() {
                                                     <h4 className="font-semibold text-primary-navy text-sm">{b.title}</h4>
                                                     <span className="text-xs text-gray-500">By {b.author} &bull; {b.topic} &bull; {b.format}</span>
                                                 </div>
-                                                <button onClick={() => handleDeleteBook(b.id)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100">
-                                                    Remove
-                                                </button>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => handleEditBookClick(b)} className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">Edit</button>
+                                                    <button onClick={() => handleDeleteBook(b.id)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100">
+                                                        Remove
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -803,19 +995,27 @@ export default function AdminCMSPage() {
                         </>
                     )}
 
-                    {/* TAB 3: RESOURCE FILES */}
                     {activeTab === 'resources' && (
                         <>
                             {resSuccess && (
                                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
-                                    Resource successfully uploaded to library!
+                                    {editingResourceId ? 'Resource successfully updated!' : 'Resource successfully uploaded to library!'}
                                 </div>
                             )}
 
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                                <div className="mb-6 pb-4 border-b border-gray-100">
-                                    <h2 className="text-xl font-bold text-primary-navy">Upload Resource File</h2>
-                                    <p className="text-xs text-gray-500 mt-1">Upload frameworks, templates, checklists, and downloadable files.</p>
+                                <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-primary-navy">
+                                            {editingResourceId ? 'Edit Resource' : 'Upload Resource File'}
+                                        </h2>
+                                        <p className="text-xs text-gray-500 mt-1">Upload frameworks, templates, checklists, and downloadable files.</p>
+                                    </div>
+                                    {editingResourceId && (
+                                        <button onClick={handleCancelEditResource} className="px-4 py-2 text-xs font-semibold border rounded-xl hover:bg-gray-50">
+                                            Cancel Edit
+                                        </button>
+                                    )}
                                 </div>
 
                                 <form onSubmit={handlePublishResource} className="space-y-6">
@@ -884,7 +1084,12 @@ export default function AdminCMSPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Cover Image (Optional)</label>
+                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                                            Cover Image (Optional){editingResourceId && existingResImgUrl ? ' (leave blank to keep current)' : ''}
+                                        </label>
+                                        {editingResourceId && existingResImgUrl && (
+                                            <img src={existingResImgUrl} alt="Current cover" className="w-16 h-16 object-cover rounded-lg border border-gray-200 mb-2" />
+                                        )}
                                         <input
                                             type="file"
                                             accept="image/*"
@@ -894,18 +1099,20 @@ export default function AdminCMSPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Downloadable Resource File (PDF, DOCX, ZIP, etc.)</label>
+                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                                            Downloadable Resource File (PDF, DOCX, ZIP, etc.){editingResourceId && existingResFileUrl ? ' (leave blank to keep current)' : ''}
+                                        </label>
                                         <input
                                             type="file"
                                             onChange={(e) => setResFile(e.target.files?.[0] || null)}
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-green file:text-white hover:file:bg-green-600 cursor-pointer"
-                                            required
+                                            required={!editingResourceId}
                                         />
                                     </div>
 
                                     <div className="flex justify-end pt-4">
                                         <button type="submit" disabled={resLoading} className="px-6 py-3 bg-primary-green text-white font-medium rounded-xl text-sm hover:bg-green-600 disabled:opacity-50">
-                                            {resLoading ? 'Uploading Resource...' : 'Save Resource'}
+                                            {resLoading ? 'Saving...' : editingResourceId ? 'Update Resource' : 'Save Resource'}
                                         </button>
                                     </div>
                                 </form>
@@ -927,9 +1134,12 @@ export default function AdminCMSPage() {
                                                         {r.category} &bull; {r.file_type} &bull; {r.is_gated ? '🔒 Gated' : '🔓 Free'}
                                                     </span>
                                                 </div>
-                                                <button onClick={() => handleDeleteResource(r.id)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100">
-                                                    Remove
-                                                </button>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => handleEditResourceClick(r)} className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">Edit</button>
+                                                    <button onClick={() => handleDeleteResource(r.id)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100">
+                                                        Remove
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -938,19 +1148,27 @@ export default function AdminCMSPage() {
                         </>
                     )}
 
-                    {/* TAB 4: EMAIL CAMPAIGNS */}
                     {activeTab === 'emails' && (
                         <>
                             {emailSuccess && (
                                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
-                                    Email campaign saved successfully!
+                                    {editingCampaignId ? 'Email campaign successfully updated!' : 'Email campaign saved successfully!'}
                                 </div>
                             )}
 
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                                <div className="mb-6 pb-4 border-b border-gray-100">
-                                    <h2 className="text-xl font-bold text-primary-navy">Draft Email Campaign</h2>
-                                    <p className="text-xs text-gray-500 mt-1">Compose newsletters and broadcast updates to your subscribers.</p>
+                                <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-primary-navy">
+                                            {editingCampaignId ? 'Edit Draft Campaign' : 'Draft Email Campaign'}
+                                        </h2>
+                                        <p className="text-xs text-gray-500 mt-1">Compose newsletters and broadcast updates to your subscribers.</p>
+                                    </div>
+                                    {editingCampaignId && (
+                                        <button onClick={handleCancelEditCampaign} className="px-4 py-2 text-xs font-semibold border rounded-xl hover:bg-gray-50">
+                                            Cancel Edit
+                                        </button>
+                                    )}
                                 </div>
 
                                 <form className="space-y-6">
@@ -996,7 +1214,7 @@ export default function AdminCMSPage() {
                                             onClick={(e) => handleSaveCampaign(e, 'Draft')}
                                             className="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-xl text-sm hover:bg-gray-300 disabled:opacity-50"
                                         >
-                                            Save as Draft
+                                            {editingCampaignId ? 'Update Draft' : 'Save as Draft'}
                                         </button>
                                         <button
                                             type="button"
@@ -1026,9 +1244,14 @@ export default function AdminCMSPage() {
                                                         Status: <span className={c.status === 'Sent' ? 'text-green-600 font-bold' : 'text-amber-600 font-bold'}>{c.status}</span> &bull; Created: {new Date(c.created_at).toLocaleDateString()}
                                                     </span>
                                                 </div>
-                                                <button onClick={() => handleDeleteCampaign(c.id)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100">
-                                                    Remove
-                                                </button>
+                                                <div className="flex space-x-2">
+                                                    {c.status === 'Draft' && (
+                                                        <button onClick={() => handleEditCampaignClick(c)} className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-100">Edit</button>
+                                                    )}
+                                                    <button onClick={() => handleDeleteCampaign(c.id)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100">
+                                                        Remove
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

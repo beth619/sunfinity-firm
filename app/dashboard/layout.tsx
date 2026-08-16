@@ -31,10 +31,11 @@ export default async function DashboardLayout({
   const planName = subscription?.tier
     ? subscription.tier.charAt(0).toUpperCase() + subscription.tier.slice(1) + ' Plan'
     : 'No active plan';
+  const isAdmin = user.email === process.env.ADMIN_EMAIL;
 
   return (
     <div className="bg-[#F2F2F7] dark:bg-black min-h-screen flex">
-      <DashboardSidebar displayName={displayName} planName={planName} />
+      <DashboardSidebar displayName={displayName} planName={planName} isAdmin={isAdmin} />
       <main className="flex-1">
         {children}
       </main>

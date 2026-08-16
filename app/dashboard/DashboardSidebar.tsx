@@ -2,21 +2,22 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-export default function DashboardSidebar({ 
-  displayName, 
-  planName 
-}: { 
-  displayName: string, 
-  planName: string 
+export default function DashboardSidebar({
+  displayName,
+  planName,
+  isAdmin,
+}: {
+  displayName: string,
+  planName: string,
+  isAdmin?: boolean,
 }) {
   const pathname = usePathname();
 
   const navLinks = [
     { href: '/dashboard', label: 'Overview' },
     { href: '/dashboard/purchases', label: 'My Purchases' },
-    { href: '/dashboard/reading-list', label: 'Reading List' },
-    { href: '/dashboard/memberships', label: 'Active Memberships' },
     { href: '/dashboard/wishlist', label: 'Wishlist' },
+    { href: '/dashboard/memberships', label: 'Active Memberships' },
     { href: '/dashboard/settings', label: 'Account Settings' },
   ];
 
@@ -38,16 +39,25 @@ export default function DashboardSidebar({
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-lg px-4 py-3 text-sm font-medium ${
-                  isActive 
-                    ? 'bg-primary-navy text-white' 
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                }`}
+                className={`rounded-lg px-4 py-3 text-sm font-medium ${isActive
+                  ? 'bg-primary-navy text-white'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
               >
                 {link.label}
               </Link>
             )
           })}
+
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3 text-sm font-medium text-primary-green hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+            >
+              <span className="text-xs bg-primary-green/10 text-primary-green px-2 py-0.5 rounded-full font-semibold">Admin</span>
+              CMS Dashboard
+            </Link>
+          )}
         </nav>
       </div>
 

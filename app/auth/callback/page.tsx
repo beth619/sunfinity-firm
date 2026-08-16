@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { linkAppUserAfterAuth } from './actions'
 
 export default function AuthCallback() {
@@ -14,36 +13,33 @@ export default function AuthCallback() {
     const params = new URLSearchParams(hash)
     const access_token = params.get('access_token')
     const refresh_token = params.get('refresh_token')
-    const error_code = params.get('error_code')
     const error_description = params.get('error_description')
 
     if (!access_token || !refresh_token) {
-      if (error_code || error_description) {
-        console.error('Auth callback error:', error_code, error_description)
-        setStatus(`Login link issue: ${error_description || error_code}`)
-      } else {
-        console.error('Auth callback: no tokens and no error in hash. Full hash:', hash)
-        setStatus('No valid session found.')
-      }
+      console.error('Auth callback: missing tokens', error_description || hash)
+      setStatus('No valid session found.')
       router.push('/resend-link')
       return
     }
 
-    supabase.auth.setSession({ access_token, refresh_token })
-      .then(({ error }) => {
-        if (error) {
-          console.error('setSession failed:', error.message)
+    fetch('/api/auth/set-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token, refresh_token }),
+    })
+      .then((res) => res.json())
+      .then(async (data) => {
+        if (data.error) {
+          console.error('set-session failed:', data.error)
           router.push('/resend-link')
-          return;
+          return
         }
-        return linkAppUserAfterAuth();
-      })
-      .then(() => {
+        await linkAppUserAfterAuth().catch((err) => console.error('Error linking user:', err))
         window.location.href = '/dashboard'
       })
       .catch((err) => {
-        console.error('Error linking user:', err)
-        window.location.href = '/dashboard'
+        console.error('set-session request failed:', err)
+        router.push('/resend-link')
       })
   }, [router])
 

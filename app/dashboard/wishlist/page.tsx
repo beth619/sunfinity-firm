@@ -7,7 +7,7 @@ import BookCard from '@/app/components/Books/BookCard';
 import RemoveButton from './RemoveButton';
 
 export const metadata = {
-  title: 'Reading List | Dashboard',
+  title: 'Wishlisist | Dashboard',
   description: 'Your saved books',
 };
 
